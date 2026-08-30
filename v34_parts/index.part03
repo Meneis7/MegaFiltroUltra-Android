@@ -1,0 +1,262 @@
+][5];
+}
+function rank4(a,b,c,d){
+  return C[a-1][1]+C[b-1][2]+C[c-1][3]+C[d-1][4];
+}
+function setBit(bits,rank){bits[rank>>>3]|=1<<(rank&7)}
+function hasBit(bits,rank){return (bits[rank>>>3]&(1<<(rank&7)))!==0}
+
+function each6(nums,cb){
+  const n=nums.length;
+  for(let i=0;i<n-5;i++)
+   for(let j=i+1;j<n-4;j++)
+    for(let k=j+1;k<n-3;k++)
+     for(let l=k+1;l<n-2;l++)
+      for(let m=l+1;m<n-1;m++)
+       for(let q=m+1;q<n;q++)
+        cb(nums[i],nums[j],nums[k],nums[l],nums[m],nums[q]);
+}
+function addClosed(nums){
+  const a=[...new Set(nums.filter(n=>n>=1&&n<=60))].sort((x,y)=>x-y);
+  if(a.length<6)return 0;
+  let count=0;
+  each6(a,(x1,x2,x3,x4,x5,x6)=>{
+    setBit(closedBits,rank6(x1,x2,x3,x4,x5,x6));count++;
+  });
+  return count;
+}
+function addTransform(nums){
+  if(nums.length!==6)return;
+  const g=[...nums].sort((a,b)=>a-b);
+  for(const delta of [-2,-1,1,2]){
+    const t=g.map(n=>n+delta);
+    if(t[0]>=1&&t[5]<=60)setBit(transformBits,rank6(...t));
+  }
+  const s=g.map(n=>61-n).sort((a,b)=>a-b);
+  setBit(transformBits,rank6(...s));
+}
+function addMegaOverlapIndexes(g){
+  g=[...g].sort((a,b)=>a-b);
+  // mark its 5-subsets
+  for(let skip=0;skip<6;skip++){
+    const v=[];for(let i=0;i<6;i++)if(i!==skip)v.push(g[i]);
+    setBit(mega5Bits,rank5(...v));
+  }
+  // mark its 4-subsets
+  for(let i=0;i<3;i++)
+   for(let j=i+1;j<4;j++)
+    for(let k=j+1;k<5;k++)
+     for(let l=k+1;l<6;l++)
+      setBit(mega4Bits,rank4(g[i],g[j],g[k],g[l]));
+}
+function sharesMega5(a,b,c,d,e,f){
+  return hasBit(mega5Bits,rank5(b,c,d,e,f))||
+         hasBit(mega5Bits,rank5(a,c,d,e,f))||
+         hasBit(mega5Bits,rank5(a,b,d,e,f))||
+         hasBit(mega5Bits,rank5(a,b,c,e,f))||
+         hasBit(mega5Bits,rank5(a,b,c,d,f))||
+         hasBit(mega5Bits,rank5(a,b,c,d,e));
+}
+function sharesMega4(a,b,c,d,e,f){
+  const v=[a,b,c,d,e,f];
+  for(let i=0;i<3;i++)
+   for(let j=i+1;j<4;j++)
+    for(let k=j+1;k<5;k++)
+     for(let l=k+1;l<6;l++)
+      if(hasBit(mega4Bits,rank4(v[i],v[j],v[k],v[l])))return true;
+  return false;
+}
+function hardPattern(a,b,c,d,e,f){
+  const g=[a,b,c,d,e,f];
+
+  let cur=1,best=1;
+  for(let i=1;i<6;i++){
+    if(g[i]===g[i-1]+1){cur++;if(cur>best)best=cur}else cur=1;
+  }
+  if(best>=4)return true;
+
+  const gap=b-a;
+  if(c-b===gap&&d-c===gap&&e-d===gap&&f-e===gap)return true;
+
+  if(g.every(n=>PRIMES.has(n)))return true;
+  if(g.every(n=>FIB.has(n)))return true;
+  if(g.every(n=>SQUARES.has(n)))return true;
+
+  let ev=0,low=0;
+  const dec=[0,0,0,0,0,0],fin=[0,0,0,0,0,0,0,0,0,0];
+  let mirror=0;
+  for(const n of g){
+    if((n&1)===0)ev++;
+    if(n<=30)low++;
+    dec[Math.floor((n-1)/10)]++;
+    fin[n%10]++;
+  }
+  if(ev===0||ev===6||low===0||low===6)return true;
+
+  let usedDec=0,maxDec=0,maxFin=0;
+  for(const x of dec){if(x){usedDec++;if(x>maxDec)maxDec=x}}
+  for(const x of fin)if(x>maxFin)maxFin=x;
+  if(maxDec>=5||usedDec<=2||maxFin>=4)return true;
+
+  for(const n of g)if(g.includes(61-n))mirror++;
+  if(mirror/2===3)return true;
+
+  return false;
+}
+function baseScore(a,b,c,d,e,f){
+  const g=[a,b,c,d,e,f];
+  let score=100;
+  const sum=a+b+c+d+e+f;
+  const dev=Math.abs(sum-183);
+  if(dev>90)score-=16;
+  else if(dev>65)score-=9;
+  else if(dev>45)score-=4;
+
+  let ev=0,low=0;
+  const dec=[0,0,0,0,0,0],fin=[0,0,0,0,0,0,0,0,0,0];
+  for(const n of g){
+    if((n&1)===0)ev++;
+    if(n<=30)low++;
+    dec[Math.floor((n-1)/10)]++;
+    fin[n%10]++;
+  }
+  if(ev===1||ev===5)score-=5;
+  if(low===1||low===5)score-=4;
+
+  let md=0,mf=0;
+  for(const x of dec)if(x>md)md=x;
+  for(const x of fin)if(x>mf)mf=x;
+  if(md===4)score-=8;else if(md===3)score-=2;
+  if(mf===3)score-=3;
+
+  let mirror=0;
+  for(const n of g)if(g.includes(61-n))mirror++;
+  if(mirror/2===2)score-=3;
+
+  const gaps=[b-a,c-b,d-c,e-d,f-e];
+  let uniq=0;
+  for(let i=0;i<5;i++){
+    let seen=false;for(let j=0;j<i;j++)if(gaps[j]===gaps[i]){seen=true;break}
+    if(!seen)uniq++;
+  }
+  const rep=5-uniq;if(rep>=2)score-=2*rep;
+
+  if(lastMega){
+    let rpt=0;
+    for(const n of g)if(lastMega.includes(n))rpt++;
+    if(rpt===3)score-=8;else if(rpt===2)score-=2;
+  }
+
+  return Math.max(0,score);
+}
+function notesFor(g){
+  const [a,b,c,d,e,f]=g;
+  const notes=[];
+  const sum=g.reduce((x,y)=>x+y,0),dev=Math.abs(sum-183);
+  if(dev>90)notes.push("soma muito extrema");
+  else if(dev>65)notes.push("soma extrema");
+  else if(dev>45)notes.push("soma afastada do centro");
+
+  const ev=g.filter(n=>n%2===0).length;if(ev===1||ev===5)notes.push("paridade 1/5");
+  const low=g.filter(n=>n<=30).length;if(low===1||low===5)notes.push("distribuição 1/5 entre metades");
+
+  const dc=new Map();for(const n of g){const k=Math.floor((n-1)/10);dc.set(k,(dc.get(k)||0)+1)}
+  const md=Math.max(...dc.values());if(md===4)notes.push("4 na mesma dezena");else if(md===3)notes.push("3 na mesma dezena");
+
+  if(sharesMega4(a,b,c,d,e,f))notes.push("coincide 4/6 com Mega histórica");
+  return notes;
+}
+function reservoirAdd(bucket,seen,g,cap){
+  seen.value++;
+  if(bucket.length<cap){bucket.push(g);return}
+  const r=Math.floor(Math.random()*seen.value);
+  if(r<cap)bucket[r]=g;
+}
+
+function candidate(a,b,c,d,e,f,reservoirs,seenByScore,cap,stats){
+  stats.scanned++;
+
+  const rank=rank6(a,b,c,d,e,f);
+  if(hasBit(closedBits,rank)){stats.closed++;return}
+  if(hasBit(transformBits,rank)){stats.transform++;return}
+  if(hardPattern(a,b,c,d,e,f)){stats.pattern++;return}
+  if(sharesMega5(a,b,c,d,e,f)){stats.mega5++;return}
+
+  let score=baseScore(a,b,c,d,e,f);
+  if(sharesMega4(a,b,c,d,e,f))score=Math.max(0,score-10);
+
+  stats.approved++;
+  if(score>stats.best)stats.best=score;
+
+  if(score>=70){
+    if(!reservoirs[score])reservoirs[score]=[];
+    if(!seenByScore[score])seenByScore[score]={value:0};
+    reservoirAdd(reservoirs[score],seenByScore[score],[a,b,c,d,e,f],cap);
+  }
+}
+function randomGame(){
+  const s=new Set();while(s.size<6)s.add(1+Math.floor(Math.random()*60));
+  return [...s].sort((a,b)=>a-b);
+}
+function pickFinal(reservoirs,q){
+  const chosen=[];
+  for(let score=100;score>=0&&chosen.length<q;score--){
+    const arr=reservoirs[score]||[];
+    // Fisher-Yates, neutral among stored ties
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));const t=arr[i];arr[i]=arr[j];arr[j]=t;
+    }
+    for(const g of arr){
+      let clone=false;
+      for(const x of chosen){
+        let ov=0;for(const n of g)if(x.game.includes(n))ov++;
+        if(ov>3){clone=true;break}
+      }
+      if(clone)continue;
+      chosen.push({game:g,score,notes:notesFor(g)});
+      if(chosen.length>=q)break;
+    }
+  }
+  return chosen;
+}
+
+async function runScan(msg){
+  stopped=false;
+  const q=Math.max(1,Math.min(30,msg.q||10));
+  const all=msg.mode==="all";
+  const target=all?TOTAL:Number(msg.mode);
+  const reservoirs=Array(101);
+  const seenByScore=Array(101);
+  const CAP=Math.max(5000,q*500);
+  const stats={scanned:0,closed:0,transform:0,pattern:0,mega5:0,approved:0,best:0};
+  let lastUpdate=Date.now(),start=Date.now();
+
+  if(all){
+    outer:
+    for(let a=1;a<=55;a++){
+      for(let b=a+1;b<=56;b++)
+       for(let c=b+1;c<=57;c++)
+        for(let d=c+1;d<=58;d++)
+         for(let e=d+1;e<=59;e++)
+          for(let f=e+1;f<=60;f++){
+            candidate(a,b,c,d,e,f,reservoirs,seenByScore,CAP,stats);
+            if(stopped)break outer;
+            if((stats.scanned&262143)===0){
+              const now=Date.now();
+              if(now-lastUpdate>120){
+                postMessage({type:"progress",done:stats.scanned,total:target,best:stats.best,approved:stats.approved,elapsed:now-start});
+                lastUpdate=now;
+                await new Promise(r=>setTimeout(r,0));
+              }
+            }
+          }
+    }
+  }else{
+    for(let i=0;i<target;i++){
+      const g=randomGame();
+      candidate(g[0],g[1],g[2],g[3],g[4],g[5],reservoirs,seenByScore,CAP,stats);
+      if(stopped)break;
+      if((i&131071)===0){
+        const now=Date.now();
+        if(now-lastUpdate>120){
+          postMessage({type:"progress",done:i+1,total:target,best:stats.best,approved:stats.approved,elapsed:now-start});
