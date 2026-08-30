@@ -1,0 +1,199 @@
+,10,11,25,51,56],"3027":[6,15,16,24,34,47],"3026":[14,19,42,45,48,54],"3025":[7,14,16,21,33,58],"3024":[13,39,42,44,47,49],"3023":[22,25,30,31,39,60],"3022":[2,3,8,11,17,22],"3021":[16,19,22,24,46,58],"3020":[6,9,17,27,29,45],"3019":[5,31,32,48,54,56],"3018":[5,6,17,27,57,58],"3017":[4,6,26,28,32,45],"3016":[11,19,33,52,55,60],"3015":[9,18,26,31,53,58],"3014":[27,30,35,40,44,58],"3013":[2,14,21,22,34,44],"3012":[5,7,17,41,42,49],"3011":[2,5,27,36,40,60],"3010":[3,30,33,35,45,47],"3009":[4,6,8,18,21,30],"3008":[11,12,14,20,42,44],"3007":[17,19,27,32,38,44],"3006":[25,42,45,48,50,60],"3005":[17,23,29,30,48,50],"3004":[1,5,7,22,50,59],"3003":[8,24,27,37,47,55],"3002":[4,27,51,52,54,58],"3001":[1,13,32,36,43,60],"3000":[22,23,36,40,52,60],"2999":[9,24,26,38,45,58],"2998":[15,18,28,31,52,58],"2997":[14,20,32,37,39,42],"2996":[7,9,27,38,49,52],"2995":[8,29,42,49,50,58]};
+
+const SOURCES = [
+  {id:"megasena", name:"Mega-Sena", kind:"todosjson", size:6,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/megasena/_todos.json"},
+  {id:"lotofacil", name:"Lotofácil", kind:"todosjson", size:15,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/lotofacil/_todos.json"},
+  {id:"lotomania", name:"Lotomania", kind:"todosjson", size:20,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/lotomania/_todos.json"},
+  {id:"timemania", name:"Timemania", kind:"todosjson", size:7,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/timemania/_todos.json"},
+  {id:"diadesorte", name:"Dia de Sorte", kind:"todosjson", size:7,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/diadesorte/_todos.json"},
+  {id:"duplasena", name:"Dupla Sena", kind:"todosjson", size:12,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/duplasena/_todos.json"},
+  {id:"maismilionaria", name:"+Milionária", kind:"todosjson", size:6,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/maismilionaria/_todos.json"},
+  {id:"austria", name:"Áustria 6/45", kind:"csv", size:6,
+   url:"https://raw.githubusercontent.com/daowa89/lottery-archive/main/at/lotto_6aus45/results.csv"},
+  {id:"germany", name:"Alemanha 6/49", kind:"csv", size:6,
+   url:"https://raw.githubusercontent.com/daowa89/lottery-archive/main/de/lotto_6aus49/results.csv"}
+];
+
+const CANONICAL_SIX = new Set(["megasena","duplasena","maismilionaria","austria","germany"]);
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+let worker=null;
+let baseReady=false;
+let workerReady=false;
+let running=false;
+let latestOfficial=0;
+let allDraws=[];
+let lastMega=null;
+let sourceCount=0;
+let currentResults=[];
+
+function intsFrom(v){
+  if(!Array.isArray(v)) return [];
+  return v.map(x=>{
+    const m=String(x).match(/^\s*(\d+)\s*$/);
+    return m?Number(m[1]):NaN;
+  }).filter(Number.isFinite);
+}
+function sortNums(a){return [...a].sort((x,y)=>x-y)}
+function valid6(a){return a.length===6&&new Set(a).size===6&&a.every(n=>n>=1&&n<=60)}
+function fmt(a){return a.map(n=>String(n).padStart(2,"0")).join(" ")}
+async function fetchJSON(url){
+  const r=await fetch(url,{cache:"no-store"});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return r.json();
+}
+async function fetchText(url){
+  const r=await fetch(url,{cache:"no-store"});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return r.text();
+}
+
+function parseJSONSource(src,obj){
+  const out=[];
+  for(const [contest,val] of Object.entries(obj)){
+    let nums=intsFrom(val);
+    if(src.id==="duplasena"){
+      if(nums.length>=12){
+        out.push({source:src.id,contest:Number(contest),label:`Dupla Sena ${contest} / 1º`,nums:sortNums(nums.slice(0,6)),canonical:true});
+        out.push({source:src.id,contest:Number(contest),label:`Dupla Sena ${contest} / 2º`,nums:sortNums(nums.slice(6,12)),canonical:true});
+      }
+      continue;
+    }
+    if(src.id==="maismilionaria") nums=nums.slice(0,6);
+    else nums=nums.slice(0,src.size);
+    if(nums.length>=6){
+      out.push({
+        source:src.id,contest:Number(contest),label:`${src.name} ${contest}`,
+        nums:sortNums(nums),canonical:CANONICAL_SIX.has(src.id)&&nums.length===6
+      });
+    }
+  }
+  return out;
+}
+function parseCSVSource(src,text){
+  const lines=text.trim().split(/\r?\n/);
+  if(lines.length<2)return[];
+  const head=lines[0].split(",").map(x=>x.trim());
+  const ix=[1,2,3,4,5,6].map(i=>head.indexOf("n"+i));
+  const dateIx=head.indexOf("date");
+  const out=[];
+  for(let r=1;r<lines.length;r++){
+    const c=lines[r].split(",");
+    const nums=ix.map(i=>Number(c[i]));
+    if(valid6(nums)){
+      const date=dateIx>=0?c[dateIx]:String(r);
+      out.push({source:src.id,contest:r,label:`${src.name} ${date}`,nums:sortNums(nums),canonical:true});
+    }
+  }
+  return out;
+}
+
+function parseTodosJSONSource(src,obj){
+  const out=[];
+
+  // Formato atual do free-apiloterias: array de objetos completos da CAIXA.
+  if(Array.isArray(obj)){
+    for(const j of obj){
+      const contest=Number(j.numero ?? j.concurso);
+      if(!Number.isFinite(contest)) continue;
+
+      if(src.id==="duplasena"){
+        const a=intsFrom(j.listaDezenas || j.dezenas || []).slice(0,6);
+        const b=intsFrom(j.listaDezenasSegundoSorteio || j.dezenasSegundoSorteio || []).slice(0,6);
+        if(valid6(a)){
+          out.push({source:src.id,contest,label:`Dupla Sena ${contest} / 1º`,nums:sortNums(a),canonical:true});
+        }
+        if(valid6(b)){
+          out.push({source:src.id,contest,label:`Dupla Sena ${contest} / 2º`,nums:sortNums(b),canonical:true});
+        }
+        continue;
+      }
+
+      let nums=intsFrom(j.listaDezenas || j.dezenas || j.numeros || []);
+      if(src.id==="maismilionaria") nums=nums.slice(0,6);
+      else nums=nums.slice(0,src.size);
+
+      if(nums.length>=6){
+        out.push({
+          source:src.id,
+          contest,
+          label:`${src.name} ${contest}`,
+          nums:sortNums(nums),
+          canonical:CANONICAL_SIX.has(src.id)&&nums.length===6
+        });
+      }
+    }
+    return out;
+  }
+
+  // Fallback: repositórios que usam {"1":[...], "2":[...]}.
+  if(obj && typeof obj==="object"){
+    return parseJSONSource(src,obj);
+  }
+
+  return out;
+}
+
+/* Cache robusto em IndexedDB: não sofre o limite pequeno do localStorage. */
+const DB_NAME="MegaFiltroUltra";
+const DB_VERSION=1;
+const CACHE_KEY="base_v27";
+const CACHE_MAX_AGE=6*60*60*1000;
+
+function openDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains("cache")) db.createObjectStore("cache");
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+
+async function cacheGet(latest){
+  try{
+    const db=await openDB();
+    const value=await new Promise((resolve,reject)=>{
+      const tx=db.transaction("cache","readonly");
+      const rq=tx.objectStore("cache").get(CACHE_KEY);
+      rq.onsuccess=()=>resolve(rq.result||null);
+      rq.onerror=()=>reject(rq.error);
+    });
+    db.close();
+
+    if(!value) return null;
+    if(value.latest!==latest) return null;
+    if(Date.now()-value.time>CACHE_MAX_AGE) return null;
+    if(!Array.isArray(value.draws)||!value.draws.length) return null;
+    return value;
+  }catch(e){
+    console.warn("Cache IndexedDB indisponível",e);
+    return null;
+  }
+}
+
+async function cachePut(latest,draws,sources){
+  try{
+    const db=await openDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction("cache","readwrite");
+      tx.objectStore("cache").put(
+        {latest,time:Date.now(),draws,sources},
+        CACHE_KEY
+      );
+      tx.oncomplete=()=>resolve();
+      tx.onerror=()=>reject(tx.error);
+    });
+    db.close();
+  }catch(e){
+    console.warn("Não foi poss
