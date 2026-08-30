@@ -24,7 +24,7 @@ jobs:
         run: |
           mkdir -p app/src/main/assets app/src/main/res/drawable-nodpi
           cat parts/index.part00 parts/index.part01 parts/index.part02 parts/index.part03 parts/index.part04 parts/index.part05 > app/src/main/assets/index.html
-          base64 -d v9_1icon.b64 > app/src/main/res/drawable-nodpi/ic_launcher.png
+          base64 -d v9_1icon_q.b64 > app/src/main/res/drawable-nodpi/ic_launcher.png
 
           python3 - <<'PY'
           from pathlib import Path
