@@ -24,7 +24,7 @@ jobs:
         run: |
           mkdir -p app/src/main/assets app/src/main/res/drawable-nodpi
           cat parts/index.part00 parts/index.part01 parts/index.part02 parts/index.part03 parts/index.part04 parts/index.part05 > app/src/main/assets/index.html
-          base64 -d v9_1icon_q.b64 > app/src/main/res/drawable-nodpi/ic_launcher.png
+          base64 -d v9_1icon_webp.b64 > app/src/main/res/drawable-nodpi/ic_launcher.webp
 
           python3 - <<'PY'
           from pathlib import Path
@@ -69,7 +69,7 @@ jobs:
           grep -q 'onConfigurationChanged' app/src/main/java/com/megafiltro/ultra/MainActivity.java
           grep -q 'versionCode 10' app/build.gradle
           grep -q 'versionName "9.1"' app/build.gradle
-          test -s app/src/main/res/drawable-nodpi/ic_launcher.png
+          test -s app/src/main/res/drawable-nodpi/ic_launcher.webp
 
       - name: Build APK V9.1
         run: gradle :app:assembleDebug --stacktrace
