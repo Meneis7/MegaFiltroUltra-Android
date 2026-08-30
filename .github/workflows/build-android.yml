@@ -1,4 +1,4 @@
-name: Build Mega Filtro V9.1
+name: Build Mega Filtro Ultra V3.4
 
 on:
   workflow_dispatch:
@@ -20,26 +20,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Monta interface e ajustes V9.1
+      - name: Monta Mega Filtro Ultra V3.4
         run: |
           mkdir -p app/src/main/assets app/src/main/res/drawable-nodpi
-          cat parts/index.part00 parts/index.part01 parts/index.part02 parts/index.part03 parts/index.part04 parts/index.part05 > app/src/main/assets/index.html
+          cat v34_parts/index.part00 v34_parts/index.part01 v34_parts/index.part02 v34_parts/index.part03 v34_parts/index.part04 > app/src/main/assets/index.html
           base64 -d v9_1icon_webp.b64 > app/src/main/res/drawable-nodpi/ic_launcher.webp
 
           python3 - <<'PY'
           from pathlib import Path
           import re
 
-          html = Path('app/src/main/assets/index.html')
-          s = html.read_text(encoding='utf-8')
-          s = s.replace('<title>Mega_Filtro_Ultra_V5_3</title>', '<title>Mega_Filtro_V9_1</title>')
-          s = s.replace('.wrap{max-width:500px;margin:auto;padding:4px}', '''.wrap{\n  width:100%;max-width:560px;margin:0 auto;\n  padding:calc(env(safe-area-inset-top,0px) + 12px) calc(env(safe-area-inset-right,0px) + 12px) calc(env(safe-area-inset-bottom,0px) + 18px) calc(env(safe-area-inset-left,0px) + 12px);\n}''')
-          responsive = '''\n.compactControls{display:flex;align-items:flex-end;justify-content:center;gap:12px;flex-wrap:nowrap;margin:8px 0 10px}\n.miniField{width:90px;flex:0 0 90px}\n#generate{flex:0 1 230px}\n#stop{flex:0 0 auto}\n@media (max-width:600px){\n  .card{padding:18px 14px;border-radius:20px}\n  .compactControls{display:grid!important;grid-template-columns:100px minmax(0,1fr);align-items:end;justify-content:stretch;gap:10px!important}\n  .miniField{width:100px!important;min-width:0;justify-self:center}\n  #generate{width:100%;min-width:0!important;padding:12px 8px}\n  #stop{grid-column:1/-1;justify-self:center;min-width:120px}\n  .progressline{flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px}\n  .results{margin-top:14px}\n}\n@media (max-width:380px){\n  #generate{font-size:13px}\n}\n'''
-          s = s.replace('header,.sidepanel,.note,.footer{display:none!important}', responsive + '\nheader,.sidepanel,.note,.footer{display:none!important}')
-          html.write_text(s, encoding='utf-8')
-
           manifest = Path('app/src/main/AndroidManifest.xml')
           m = manifest.read_text(encoding='utf-8')
+          m = re.sub(r'android:label="[^"]*"', 'android:label="Mega Filtro Ultra V3.4"', m)
           if 'android:icon=' not in m:
               m = m.replace('<application\n', '<application\n        android:icon="@drawable/ic_launcher"\n        android:roundIcon="@drawable/ic_launcher"\n', 1)
           if 'android:configChanges=' not in m:
@@ -57,27 +50,29 @@ jobs:
 
           gradle = Path('app/build.gradle')
           g = gradle.read_text(encoding='utf-8')
-          g = re.sub(r'versionCode\s+\d+', 'versionCode 10', g)
-          g = re.sub(r'versionName\s+"[^"]+"', 'versionName "9.1"', g)
+          g = re.sub(r'applicationId\s+"[^"]+"', 'applicationId "com.megafiltro.ultra.v34"', g)
+          g = re.sub(r'versionCode\s+\d+', 'versionCode 34', g)
+          g = re.sub(r'versionName\s+"[^"]+"', 'versionName "3.4"', g)
           gradle.write_text(g, encoding='utf-8')
           PY
 
-      - name: Confere V9.1 antes do build
+      - name: Confere V3.4 antes do build
         run: |
+          grep -q '<title>Mega_Filtro_Ultra_V3_4</title>' app/src/main/assets/index.html
+          grep -q 'MEGA <span>FILTRO ULTRA</span> V3.4' app/src/main/assets/index.html
+          grep -q 'applicationId "com.megafiltro.ultra.v34"' app/build.gradle
+          grep -q 'versionName "3.4"' app/build.gradle
           grep -q 'configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden"' app/src/main/AndroidManifest.xml
           grep -q 'android:icon="@drawable/ic_launcher"' app/src/main/AndroidManifest.xml
-          grep -q 'onConfigurationChanged' app/src/main/java/com/megafiltro/ultra/MainActivity.java
-          grep -q 'versionCode 10' app/build.gradle
-          grep -q 'versionName "9.1"' app/build.gradle
           test -s app/src/main/res/drawable-nodpi/ic_launcher.webp
 
-      - name: Build APK V9.1
+      - name: Build APK V3.4
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Renomeia APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Mega_Filtro_V9_1.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Mega_Filtro_Ultra_V3_4.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Mega_Filtro_V9_1
-          path: Mega_Filtro_V9_1.apk
+          name: Mega_Filtro_Ultra_V3_4
+          path: Mega_Filtro_Ultra_V3_4.apk
