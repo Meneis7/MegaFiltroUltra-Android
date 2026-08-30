@@ -1,0 +1,190 @@
+  }
+}
+
+async function loadBase(){
+  $("badge").className="badge";
+  $("badge").textContent="Confirmando concurso atual...";
+  $("baseStatus").textContent="Carregando histórico consolidado e complemento embutido até o concurso 3.050...";
+  $("generate").disabled=true;
+  $("evalBtn").disabled=true;
+
+  baseReady=false;
+  workerReady=false;
+  allDraws=[];
+  sourceCount=0;
+  lastMega=null;
+  latestOfficial=0;
+
+  // V3: baseline verificado e embutido até o concurso 3050.
+  // Evita depender do _ultimo.json, que está parado no concurso 2994.
+  latestOfficial=EMBEDDED_LATEST;
+  lastMega=[...EMBEDDED_LAST_MEGA];
+
+  // A partir da segunda abertura no mesmo concurso, reutiliza tudo do IndexedDB.
+  const cached=await cacheGet(latestOfficial);
+  if(cached){
+    allDraws=cached.draws;
+    sourceCount=cached.sources||0;
+    $("baseStatus").textContent="Base completa encontrada no cache local. Preparando o índice...";
+  }else{
+    $("badge").textContent="Baixando históricos consolidados...";
+    $("baseStatus").textContent=
+      "Primeira carga: baixando os históricos completos em paralelo (uma requisição por modalidade)...";
+
+    const tasks=SOURCES.map(async src=>{
+      try{
+        let draws;
+        if(src.kind==="todosjson"){
+          draws=parseTodosJSONSource(src,await fetchJSON(src.url));
+        }else if(src.kind==="csv"){
+          draws=parseCSVSource(src,await fetchText(src.url));
+        }else{
+          draws=parseJSONSource(src,await fetchJSON(src.url));
+        }
+        return {ok:true,src,draws};
+      }catch(e){
+        console.warn("Falha em",src.name,e);
+        return {ok:false,src,error:String(e)};
+      }
+    });
+
+    const loaded=await Promise.all(tasks);
+    const failures=[];
+
+    for(const x of loaded){
+      if(x.ok && x.draws.length){
+        sourceCount++;
+        allDraws.push(...x.draws);
+      }else{
+        failures.push(x.src.name);
+      }
+    }
+
+    const megaSet=new Set(
+      allDraws
+        .filter(d=>d.source==="megasena"&&Number.isFinite(Number(d.contest)))
+        .map(d=>Number(d.contest))
+    );
+
+    // Completa instantaneamente o espelho 1..2994 com os concursos 2995..3050
+    // verificados e embutidos nesta versão.
+    for(const [contestText,nums] of Object.entries(EMBEDDED_MEGA_DELTA)){
+      const contest=Number(contestText);
+      if(!megaSet.has(contest)){
+        megaSet.add(contest);
+        allDraws.push({
+          source:"megasena",
+          contest,
+          label:`Mega-Sena ${contest}`,
+          nums:[...nums],
+          canonical:true
+        });
+      }
+    }
+
+    if(megaSet.size<Math.max(1,latestOfficial-100)){
+      $("badge").className="badge err";
+      $("badge").textContent="Histórico consolidado não carregou";
+      $("baseStatus").innerHTML=
+        `O JSON consolidado da Mega-Sena retornou apenas <b>${megaSet.size.toLocaleString("pt-BR")}</b> concursos. `+
+        `A V3 parou e <b>não fará milhares de chamadas individuais</b>. Pressione F5; se persistir, me envie esta tela.`;
+      return;
+    }
+
+    const missing=[];
+    for(let n=1;n<=latestOfficial;n++){
+      if(!megaSet.has(n)) missing.push(n);
+    }
+
+    // Tolera até 100 concursos de diferença entre o espelho e a CAIXA.
+    if(missing.length>100){
+      $("badge").className="badge err";
+      $("badge").textContent="Histórico consolidado desatualizado";
+      $("baseStatus").innerHTML=
+        `O histórico consolidado está faltando <b>${missing.length}</b> concursos. `+
+        `A V3 não vai cair no problema antigo de buscar milhares de concursos um por um.`;
+      return;
+    }
+
+    if(missing.length){
+      $("baseStatus").textContent=
+        `Histórico consolidado carregado. Completando ${missing.length} concurso(s) recente(s) pelo espelho GitHub...`;
+
+      let pending=[...missing];
+      const BATCH=8;
+      const MAX_ROUNDS=3;
+
+      for(let round=1;round<=MAX_ROUNDS && pending.length;round++){
+        const failed=[];
+
+        for(let pos=0;pos<pending.length;pos+=BATCH){
+          const batch=pending.slice(pos,pos+BATCH);
+
+          const rows=await Promise.all(batch.map(async n=>{
+            try{
+              const j=await fetchJSON(`${MEGA_GITHUB_BASE}/${n}.json`);
+              const nums=intsFrom(j.listaDezenas||[]).slice(0,6);
+
+              if(valid6(nums)){
+                return {ok:true,d:{
+                  source:"megasena",
+                  contest:Number(j.numero)||n,
+                  label:`Mega-Sena ${j.numero||n}`,
+                  nums:sortNums(nums),
+                  canonical:true
+                }};
+              }
+            }catch(e){}
+            return {ok:false,n};
+          }));
+
+          for(const r of rows){
+            if(r.ok){
+              if(!megaSet.has(r.d.contest)){
+                megaSet.add(r.d.contest);
+                allDraws.push(r.d);
+              }
+            }else{
+              failed.push(r.n);
+            }
+          }
+
+          $("baseStatus").textContent=
+            `Completando Mega-Sena: ${megaSet.size.toLocaleString("pt-BR")} / ${latestOfficial.toLocaleString("pt-BR")} • tentativa ${round}/${MAX_ROUNDS}`;
+
+          await sleep(120);
+        }
+
+        pending=failed;
+
+        if(pending.length && round<MAX_ROUNDS){
+          $("baseStatus").textContent=
+            `Repetindo ${pending.length} concurso(s) que falharam...`;
+          await sleep(700);
+        }
+      }
+
+      if(pending.length){
+        $("badge").className="badge err";
+        $("badge").textContent="Faltaram concursos recentes";
+        $("baseStatus").innerHTML=
+          `Ainda faltaram <b>${pending.length}</b> concurso(s). Aguarde alguns segundos e pressione F5.`;
+        return;
+      }
+    }
+
+    if(megaSet.size!==latestOfficial){
+      $("badge").className="badge err";
+      $("badge").textContent="Mega incompleta";
+      $("baseStatus").textContent="A geração foi bloqueada porque a Mega-Sena não ficou 100% completa.";
+      return;
+    }
+
+    await cachePut(latestOfficial,allDraws,sourceCount);
+
+    if(failures.length){
+      console.warn("Fontes secundárias indisponíveis:",failures);
+    }
+  }
+
+  const megaFinal=new Set(
