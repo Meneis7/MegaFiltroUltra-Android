@@ -1,0 +1,190 @@
+  let uniq=0;
+  for(let i=0;i<5;i++){
+    let seen=false;for(let j=0;j<i;j++)if(gaps[j]===gaps[i]){seen=true;break}
+    if(!seen)uniq++;
+  }
+  const rep=5-uniq;if(rep>=2)score-=2*rep;
+
+  if(lastMega){
+    let rpt=0;
+    for(const n of g)if(lastMega.includes(n))rpt++;
+    if(rpt===3)score-=8;else if(rpt===2)score-=2;
+  }
+
+  return Math.max(0,score);
+}
+function notesFor(g){
+  const [a,b,c,d,e,f]=g;
+  const notes=[];
+  const sum=g.reduce((x,y)=>x+y,0),dev=Math.abs(sum-183);
+  if(dev>90)notes.push("soma muito extrema");
+  else if(dev>65)notes.push("soma extrema");
+  else if(dev>45)notes.push("soma afastada do centro");
+
+  const ev=g.filter(n=>n%2===0).length;if(ev===1||ev===5)notes.push("paridade 1/5");
+  const low=g.filter(n=>n<=30).length;if(low===1||low===5)notes.push("distribuição 1/5 entre metades");
+
+  const dc=new Map();for(const n of g){const k=Math.floor((n-1)/10);dc.set(k,(dc.get(k)||0)+1)}
+  const md=Math.max(...dc.values());if(md===4)notes.push("4 na mesma dezena");else if(md===3)notes.push("3 na mesma dezena");
+
+  if(sharesMega4(a,b,c,d,e,f))notes.push("coincide 4/6 com Mega histórica");
+  return notes;
+}
+function reservoirAdd(bucket,seen,g,cap){
+  seen.value++;
+  if(bucket.length<cap){bucket.push(g);return}
+  const r=Math.floor(Math.random()*seen.value);
+  if(r<cap)bucket[r]=g;
+}
+
+function candidate(a,b,c,d,e,f,reservoirs,seenByScore,cap,stats){
+  stats.scanned++;
+
+  const rank=rank6(a,b,c,d,e,f);
+  if(hasBit(closedBits,rank)){stats.closed++;return}
+  if(hasBit(transformBits,rank)){stats.transform++;return}
+  if(hardPattern(a,b,c,d,e,f)){stats.pattern++;return}
+  if(sharesMega5(a,b,c,d,e,f)){stats.mega5++;return}
+
+  let score=baseScore(a,b,c,d,e,f);
+  if(sharesMega4(a,b,c,d,e,f))score=Math.max(0,score-10);
+
+  stats.approved++;
+  if(score>stats.best)stats.best=score;
+
+  if(score>=70){
+    if(!reservoirs[score])reservoirs[score]=[];
+    if(!seenByScore[score])seenByScore[score]={value:0};
+    reservoirAdd(reservoirs[score],seenByScore[score],[a,b,c,d,e,f],cap);
+  }
+}
+function randomGame(){
+  const s=new Set();while(s.size<6)s.add(1+Math.floor(Math.random()*60));
+  return [...s].sort((a,b)=>a-b);
+}
+function pickFinal(reservoirs,q){
+  const chosen=[];
+  for(let score=100;score>=0&&chosen.length<q;score--){
+    const arr=reservoirs[score]||[];
+    // Fisher-Yates, neutral among stored ties
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));const t=arr[i];arr[i]=arr[j];arr[j]=t;
+    }
+    for(const g of arr){
+      let clone=false;
+      for(const x of chosen){
+        let ov=0;for(const n of g)if(x.game.includes(n))ov++;
+        if(ov>3){clone=true;break}
+      }
+      if(clone)continue;
+      chosen.push({game:g,score,notes:notesFor(g)});
+      if(chosen.length>=q)break;
+    }
+  }
+  return chosen;
+}
+
+async function runScan(msg){
+  stopped=false;
+  const q=Math.max(1,Math.min(99,msg.q||1));
+  const all=msg.mode==="all";
+  const target=all?TOTAL:Number(msg.mode);
+  const reservoirs=Array(101);
+  const seenByScore=Array(101);
+  const CAP=Math.max(5000,q*500);
+  const stats={scanned:0,closed:0,transform:0,pattern:0,mega5:0,approved:0,best:0};
+  let lastUpdate=Date.now(),start=Date.now();
+
+  if(all){
+    outer:
+    for(let a=1;a<=55;a++){
+      for(let b=a+1;b<=56;b++)
+       for(let c=b+1;c<=57;c++)
+        for(let d=c+1;d<=58;d++)
+         for(let e=d+1;e<=59;e++)
+          for(let f=e+1;f<=60;f++){
+            candidate(a,b,c,d,e,f,reservoirs,seenByScore,CAP,stats);
+            if(stopped)break outer;
+            if((stats.scanned&262143)===0){
+              const now=Date.now();
+              if(now-lastUpdate>120){
+                postMessage({type:"progress",done:stats.scanned,total:target,best:stats.best,approved:stats.approved,elapsed:now-start});
+                lastUpdate=now;
+                await new Promise(r=>setTimeout(r,0));
+              }
+            }
+          }
+    }
+  }else{
+    for(let i=0;i<target;i++){
+      const g=randomGame();
+      candidate(g[0],g[1],g[2],g[3],g[4],g[5],reservoirs,seenByScore,CAP,stats);
+      if(stopped)break;
+      if((i&131071)===0){
+        const now=Date.now();
+        if(now-lastUpdate>120){
+          postMessage({type:"progress",done:i+1,total:target,best:stats.best,approved:stats.approved,elapsed:now-start});
+          lastUpdate=now;await new Promise(r=>setTimeout(r,0));
+        }
+      }
+    }
+  }
+
+  const results=pickFinal(reservoirs,q);
+  postMessage({
+    type:"done",stopped,results,stats,total:target,elapsed:Date.now()-start,exhaustive:all&&!stopped
+  });
+}
+function evaluate(g){
+  g=[...g].sort((a,b)=>a-b);
+  const [a,b,c,d,e,f]=g;
+  const rank=rank6(a,b,c,d,e,f);
+  const rejection=[];
+  if(hasBit(closedBits,rank))rejection.push("conjunto fechado de 6 já ocorreu no banco universal");
+  if(hasBit(transformBits,rank))rejection.push("transformação histórica (+/−1, +/−2 ou espelho)");
+  if(hardPattern(a,b,c,d,e,f))rejection.push("padrão matemático/estrutural de exclusão");
+  if(sharesMega5(a,b,c,d,e,f))rejection.push("coincide 5/6 ou 6/6 com Mega-Sena histórica");
+  let score=baseScore(a,b,c,d,e,f);
+  if(sharesMega4(a,b,c,d,e,f))score=Math.max(0,score-10);
+  return{game:g,approved:rejection.length===0,score:rejection.length?0:score,rejection,notes:notesFor(g)};
+}
+
+onmessage=async ev=>{
+  const m=ev.data;
+  if(m.type==="stop"){stopped=true;return}
+
+  if(m.type==="init"){
+    buildC();
+    lastMega=m.lastMega||null;
+    drawsStore=m.draws||[];
+
+    closedBits=new Uint8Array(Math.ceil(TOTAL/8));
+    transformBits=new Uint8Array(Math.ceil(TOTAL/8));
+    mega5Bits=new Uint8Array(Math.ceil(C[60][5]/8));
+    mega4Bits=new Uint8Array(Math.ceil(C[60][4]/8));
+
+    let subsets=0;
+    for(let i=0;i<drawsStore.length;i++){
+      const d=drawsStore[i];
+      subsets+=addClosed(d.nums);
+
+      if(d.canonical&&d.nums.length===6)addTransform(d.nums);
+      if(d.source==="megasena"&&d.nums.length===6)addMegaOverlapIndexes(d.nums);
+
+      if((i&255)===0){
+        postMessage({type:"initProgress",done:i+1,total:drawsStore.length,subsets});
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+
+    postMessage({
+      type:"ready",
+      draws:drawsStore.length,
+      subsets
+    });
+    return;
+  }
+
+  if(m.type==="scan"){await runScan(m);return}
+  if(m.type==="eval"){postMessage({type:"evalResult",result:evaluate(m.game)});return}
+};
