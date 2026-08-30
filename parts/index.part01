@@ -1,0 +1,190 @@
+  {id:"timemania", name:"Timemania", kind:"todosjson", size:7,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/timemania/_todos.json"},
+  {id:"diadesorte", name:"Dia de Sorte", kind:"todosjson", size:7,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/diadesorte/_todos.json"},
+  {id:"duplasena", name:"Dupla Sena", kind:"todosjson", size:12,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/duplasena/_todos.json"},
+  {id:"maismilionaria", name:"+Milionária", kind:"todosjson", size:6,
+   url:"https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/maismilionaria/_todos.json"},
+  {id:"austria", name:"Áustria 6/45", kind:"csv", size:6,
+   url:"https://raw.githubusercontent.com/daowa89/lottery-archive/main/at/lotto_6aus45/results.csv"},
+  {id:"germany", name:"Alemanha 6/49", kind:"csv", size:6,
+   url:"https://raw.githubusercontent.com/daowa89/lottery-archive/main/de/lotto_6aus49/results.csv"}
+];
+
+const CANONICAL_SIX = new Set(["megasena","duplasena","maismilionaria","austria","germany"]);
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+let worker=null;
+let baseReady=false;
+let workerReady=false;
+let running=false;
+let latestOfficial=0;
+let allDraws=[];
+let lastMega=null;
+let sourceCount=0;
+let currentResults=[];
+
+function intsFrom(v){
+  if(!Array.isArray(v)) return [];
+  return v.map(x=>{
+    const m=String(x).match(/^\s*(\d+)\s*$/);
+    return m?Number(m[1]):NaN;
+  }).filter(Number.isFinite);
+}
+function sortNums(a){return [...a].sort((x,y)=>x-y)}
+function valid6(a){return a.length===6&&new Set(a).size===6&&a.every(n=>n>=1&&n<=60)}
+function fmt(a){return a.map(n=>String(n).padStart(2,"0")).join(" ")}
+async function fetchJSON(url){
+  const r=await fetch(url,{cache:"no-store"});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return r.json();
+}
+async function fetchText(url){
+  const r=await fetch(url,{cache:"no-store"});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return r.text();
+}
+
+function parseJSONSource(src,obj){
+  const out=[];
+  for(const [contest,val] of Object.entries(obj)){
+    let nums=intsFrom(val);
+    if(src.id==="duplasena"){
+      if(nums.length>=12){
+        out.push({source:src.id,contest:Number(contest),label:`Dupla Sena ${contest} / 1º`,nums:sortNums(nums.slice(0,6)),canonical:true});
+        out.push({source:src.id,contest:Number(contest),label:`Dupla Sena ${contest} / 2º`,nums:sortNums(nums.slice(6,12)),canonical:true});
+      }
+      continue;
+    }
+    if(src.id==="maismilionaria") nums=nums.slice(0,6);
+    else nums=nums.slice(0,src.size);
+    if(nums.length>=6){
+      out.push({
+        source:src.id,contest:Number(contest),label:`${src.name} ${contest}`,
+        nums:sortNums(nums),canonical:CANONICAL_SIX.has(src.id)&&nums.length===6
+      });
+    }
+  }
+  return out;
+}
+function parseCSVSource(src,text){
+  const lines=text.trim().split(/\r?\n/);
+  if(lines.length<2)return[];
+  const head=lines[0].split(",").map(x=>x.trim());
+  const ix=[1,2,3,4,5,6].map(i=>head.indexOf("n"+i));
+  const dateIx=head.indexOf("date");
+  const out=[];
+  for(let r=1;r<lines.length;r++){
+    const c=lines[r].split(",");
+    const nums=ix.map(i=>Number(c[i]));
+    if(valid6(nums)){
+      const date=dateIx>=0?c[dateIx]:String(r);
+      out.push({source:src.id,contest:r,label:`${src.name} ${date}`,nums:sortNums(nums),canonical:true});
+    }
+  }
+  return out;
+}
+
+function parseTodosJSONSource(src,obj){
+  const out=[];
+
+  // Formato atual do free-apiloterias: array de objetos completos da CAIXA.
+  if(Array.isArray(obj)){
+    for(const j of obj){
+      const contest=Number(j.numero ?? j.concurso);
+      if(!Number.isFinite(contest)) continue;
+
+      if(src.id==="duplasena"){
+        const a=intsFrom(j.listaDezenas || j.dezenas || []).slice(0,6);
+        const b=intsFrom(j.listaDezenasSegundoSorteio || j.dezenasSegundoSorteio || []).slice(0,6);
+        if(valid6(a)){
+          out.push({source:src.id,contest,label:`Dupla Sena ${contest} / 1º`,nums:sortNums(a),canonical:true});
+        }
+        if(valid6(b)){
+          out.push({source:src.id,contest,label:`Dupla Sena ${contest} / 2º`,nums:sortNums(b),canonical:true});
+        }
+        continue;
+      }
+
+      let nums=intsFrom(j.listaDezenas || j.dezenas || j.numeros || []);
+      if(src.id==="maismilionaria") nums=nums.slice(0,6);
+      else nums=nums.slice(0,src.size);
+
+      if(nums.length>=6){
+        out.push({
+          source:src.id,
+          contest,
+          label:`${src.name} ${contest}`,
+          nums:sortNums(nums),
+          canonical:CANONICAL_SIX.has(src.id)&&nums.length===6
+        });
+      }
+    }
+    return out;
+  }
+
+  // Fallback: repositórios que usam {"1":[...], "2":[...]}.
+  if(obj && typeof obj==="object"){
+    return parseJSONSource(src,obj);
+  }
+
+  return out;
+}
+
+/* Cache robusto em IndexedDB: não sofre o limite pequeno do localStorage. */
+const DB_NAME="MegaFiltroUltra";
+const DB_VERSION=1;
+const CACHE_KEY="base_v27";
+const CACHE_MAX_AGE=6*60*60*1000;
+
+function openDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains("cache")) db.createObjectStore("cache");
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+
+async function cacheGet(latest){
+  try{
+    const db=await openDB();
+    const value=await new Promise((resolve,reject)=>{
+      const tx=db.transaction("cache","readonly");
+      const rq=tx.objectStore("cache").get(CACHE_KEY);
+      rq.onsuccess=()=>resolve(rq.result||null);
+      rq.onerror=()=>reject(rq.error);
+    });
+    db.close();
+
+    if(!value) return null;
+    if(value.latest!==latest) return null;
+    if(Date.now()-value.time>CACHE_MAX_AGE) return null;
+    if(!Array.isArray(value.draws)||!value.draws.length) return null;
+    return value;
+  }catch(e){
+    console.warn("Cache IndexedDB indisponível",e);
+    return null;
+  }
+}
+
+async function cachePut(latest,draws,sources){
+  try{
+    const db=await openDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction("cache","readwrite");
+      tx.objectStore("cache").put(
+        {latest,time:Date.now(),draws,sources},
+        CACHE_KEY
+      );
+      tx.oncomplete=()=>resolve();
+      tx.onerror=()=>reject(tx.error);
+    });
+    db.close();
+  }catch(e){
+    console.warn("Não foi possível salvar cache",e);
