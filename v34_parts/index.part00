@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mega_Filtro_Ultra_V3_4</title>
+<style>
+:root{
+  --bg:#06100c;--panel:#0d1d15;--panel2:#091710;--line:#244c37;
+  --text:#f1faf4;--muted:#9fbaa9;--green:#55e68e;--green2:#20b96a;
+  --gold:#ffd66b;--red:#ff8080;--blue:#8ac8ff;--cyan:#72e6d0;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;color:var(--text);font-family:Segoe UI,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 15% 0%,#123e27 0,transparent 30%),
+    radial-gradient(circle at 100% 10%,#122e23 0,transparent 28%),var(--bg)
+}
+.wrap{max-width:1180px;margin:auto;padding:26px 16px 60px}
+header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
+h1{margin:0;font-size:clamp(28px,5vw,48px);letter-spacing:-1px}
+h1 span{color:var(--green)}
+.subtitle{margin:8px 0 0;max-width:790px;color:var(--muted);line-height:1.5}
+.badge{padding:9px 13px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:13px;background:#08150f}
+.badge.ok{color:var(--green);border-color:#2f8857}.badge.err{color:var(--red);border-color:#874848}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{
+  background:linear-gradient(180deg,rgba(15,36,25,.97),rgba(8,22,15,.97));
+  border:1px solid var(--line);border-radius:18px;padding:20px;
+  box-shadow:0 18px 44px rgba(0,0,0,.2)
+}
+.card h2{margin:0 0 14px;font-size:20px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.row{grid-template-columns:1fr}}
+label{display:block;color:var(--muted);font-size:13px;margin:12px 0 6px}
+input,select{
+  width:100%;background:#07140e;color:var(--text);border:1px solid #315b43;border-radius:10px;
+  padding:12px 13px;font-size:16px;outline:none
+}
+input:focus,select:focus{border-color:var(--green)}
+button{
+  border:0;border-radius:11px;padding:12px 16px;font-size:15px;font-weight:750;cursor:pointer;
+  color:#04200e;background:var(--green);transition:.15s
+}
+button:hover{transform:translateY(-1px);filter:brightness(1.05)}
+button.secondary{background:#142c20;color:var(--text);border:1px solid #315b43}
+button.danger{background:#3a1919;color:#ffdada;border:1px solid #6c3636}
+button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.check{display:flex;align-items:center;gap:9px;margin-top:12px;color:var(--muted);font-size:14px}
+.check input{width:auto;accent-color:var(--green)}
+.status{
+  margin-top:13px;padding:12px 14px;background:#07140e;border:1px solid #203f2e;border-radius:12px;
+  color:var(--muted);font-size:13px;line-height:1.5
+}
+.progress{height:10px;background:#06100b;border-radius:99px;overflow:hidden;margin-top:10px;display:none}
+.bar{height:100%;width:0;background:linear-gradient(90deg,var(--green2),var(--green));transition:width .12s}
+.progressline{display:flex;justify-content:space-between;gap:12px;margin-top:8px;color:var(--muted);font-size:12px}
+.results{margin-top:18px}
+.game{
+  display:grid;grid-template-columns:48px 1fr 48px;gap:10px;align-items:center;
+  border-bottom:1px solid #1d3b2a;padding:13px 6px
+}
+@media(max-width:580px){.game{grid-template-columns:40px 1fr}.score{grid-column:2;text-align:left!important}}
+.rank{font-weight:800;color:var(--muted)}
+.nums{display:flex;gap:7px;flex-wrap:wrap}
+.ball{
+  min-width:39px;height:39px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  background:#eafff0;color:#072412;font-weight:850;border:2px solid #6ce795
+}
+.score{text-align:right;color:var(--gold);font-weight:850}
+.small{font-size:12px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{padding:12px;background:#07140e;border:1px solid #203f2e;border-radius:12px}
+.kpi span{display:block;color:var(--muted);font-size:12px}.kpi b{display:block;font-size:18px;margin-top:4px}
+.note{
+  margin-top:16px;padding:12px 14px;border-radius:12px;border:1px solid #6c5d2f;
+  background:#211d0e;color:#f2deb0;font-size:13px;line-height:1.5
+}
+.goodnote{
+  margin-top:12px;padding:12px 14px;border-radius:12px;border:1px solid #236b47;
+  background:#0a2116;color:#bff7d5;font-size:13px;line-height:1.5
+}
+details{margin-top:15px;border-top:1px solid #244532;padding-top:13px}
+summary{cursor:pointer;font-weight:750}
+ul{color:var(--muted);line-height:1.6;padding-left:20px}
+.evalout{display:none;margin-top:13px;padding:13px;border-radius:12px;background:#07140e;border:1px solid #203f2e}
+.pass{color:var(--green)}.fail{color:var(--red)}
+.footer{text-align:center;margin-top:18px;color:#718a7b;font-size:12px;line-height:1.5}
+.pill{display:inline-block;padding:3px 7px;border-radius:999px;border:1px solid #315b43;color:var(--cyan);font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>MEGA <span>FILTRO ULTRA</span> V3.4</h1>
+  </div>
+  <div id="badge" class="badge">Preparando base...</div>
+</header>
+
+<div class="grid">
+<section class="card">
+  <h2>Gerar jogos</h2>
+  <div class="row single">
+    <div>
+      <label>Quantidade de jogos</label>
+      <input id="qtd" type="number" min="1" max="30" value="10">
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="generate" disabled>ANALISAR E GERAR</button>
+    <button id="stop" class="danger" disabled>PARAR</button>
+  </div>
+
+  <div id="progress" class="progress"><div id="bar" class="bar"></div></div>
+  <div class="progressline"><span id="progressText"></span><span id="eta"></span></div>
+  <div id="status" class="status">Aguardando a base histórica ficar pronta.</div>
+
+  <div id="results" class="results"></div>
+</section>
+
+<section class="card">
+  <h2>Base e índice universal</h2>
+  <div class="kpis">
+    <div class="kpi"><span>Último concurso</span><b id="kLastContest">—</b></div>
+    <div class="kpi"><span>Última Mega</span><b id="kLast">—</b></div>
+  </div>
+  <div style="display:none">
+    <span id="kMega"></span>
+    <span id="kSources"></span>
+  </div>
+
+  <div id="baseStatus" class="status">
+    V3 usa histórico consolidado + concursos 2.995–3.050 embutidos, evitando depender do espelho atrasado.
+  </div>
+
+  <div style="height:1px;background:#1f3d2c;margin:18px 0"></div>
+
+  <h2>Avaliar um jogo</h2>
+  <label>Digite seis dezenas</label>
+  <input id="evalInput" value="" placeholder="__  __  __  __  __  __" inputmode="numeric" autocomplete="off" maxlength="17">
+  <div class="actions"><button id="evalBtn" class="secondary" disabled>AVALIAR</button></div>
+  <div id="evalOut" class="evalout"></div>
+</section>
+</div>
+
+<div class="note">
+  <b>Importante:</b> analisar todas as combinações não altera a probabilidade física do sorteio.
+  O sistema serve para aplicar de forma consistente as regras que definimos e encontrar os jogos de maior nota dentro desse sistema.
+</div>
+
+<div class="footer">
+  Mega_Filtro_Ultra_V3_4 • processamento local no navegador • nenhum programa é instalado.
+</div>
+</div>
+
+<script>
+"use strict";
+
+const TOTAL_COMBINATIONS = 50063860;
+const MEGA_GITHUB_BASE = "https://raw.githubusercontent.com/maickon/free-apiloterias/refs/heads/master/database/megasena";
+const MEGA_LATEST_URL = MEGA_GITHUB_BASE + "/_ultimo.json";
+const EMBEDDED_LATEST = 3050;
+const EMBEDDED_LAST_MEGA = [11,14,30,38,49,55];
+const EMBEDDED_MEGA_DELTA = {"3050":[11,14,30,38,49,55],"3049":[6,13,36,43,53,55],"3048":[2,6,27,39,44,50],"3047":[4,18,22,26,31,58],"3046":[16,23,24,33,36,52],"3045":[23,29,33,42,43,57],"3044":[4,15,17,40,55,58],"3043":[10,11,16,37,42,53],"3042":[2,5,10,35,40,53],"3041":[16,21,24,31,43,54],"3040":[3,16,24,30,49,54],"3039":[14,16,21,39,53,58],"3038":[30,35,38,39,46,50],"3037":[2,11,22,30,51,54],"3036":[5,12,21,33,43,50],"3035":[5,7,17,51,56,59],"3034":[8,28,30,37,39,60],"3033":[18,21,23,43,55,58],"3032":[8,12,23,27,42,43],"3031":[20,28,32,35,40,54],"3030":[6,11,25,45,48,58],"3029":[1,11,24,33,35,59],"3028":[2
